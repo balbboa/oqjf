@@ -5,7 +5,9 @@
     "rootDir": "src",
     "paths": {
       "persona": ["../../packages/persona/src"],
-      "safety": ["../../packages/safety/src"]
+      "persona/*": ["../../packages/persona/src/*"],
+      "safety": ["../../packages/safety/src"],
+      "safety/*": ["../../packages/safety/src/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*", "prisma/**/*"]

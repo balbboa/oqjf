@@ -22,14 +22,22 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
     // Must reply before processing to avoid Meta retrying
     reply.status(200).send('OK');
 
+    // Entry log — LGPD safe (no content), first signal that a request reached the server
+    app.log.info({ method: 'POST', path: '/webhook/whatsapp' }, 'Webhook request received');
+
     // Verify HMAC signature
     const signature = (req.headers['x-hub-signature-256'] as string) ?? '';
     const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
 
     if (!verifyMetaSignature(rawBody, signature)) {
-      app.log.warn({ signature }, 'Invalid Meta signature — ignoring payload');
+      app.log.warn(
+        { signaturePresent: !!signature, bodyLength: rawBody.length },
+        'Invalid Meta signature — ignoring payload',
+      );
       return;
     }
+
+    app.log.info('Webhook signature verified, processing payload');
 
     // Process asynchronously (webhook already replied 200)
     await handleWebhookPayload(req.body).catch(err => {

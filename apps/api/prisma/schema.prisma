@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  whatsappId      String    @unique
+  whatsappName    String?
+  displayName     String?
+  email           String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  conversationState Json?
+  userProfile       Json?
+  lastMessageAt     DateTime?
+
+  freeMessagesUsed    Int     @default(0)
+  freeMessagesLimit   Int     @default(30)
+  isPremium           Boolean @default(false)
+  premiumSince        DateTime?
+
+  crisisFlag          Boolean  @default(false)
+  crisisFlaggedAt     DateTime?
+  onboardingCompleted Boolean  @default(false)
+
+  stripeCustomerId    String?  @unique
+
+  messages        Message[]
+  subscription    Subscription?
+  memories        Memory[]
+  safetyEvents    SafetyEvent[]
+}
+
+model Message {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  role          MessageRole
+  content       String      @db.Text
+  whatsappId    String?
+  inputTokens   Int?
+  outputTokens  Int?
+  costUsdMicro  Int?
+  modelUsed     String?
+  isCrisis      Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Memory {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  key        String
+  value      String
+  confidence Float    @default(1.0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, key])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id])
+  stripeSubscriptionId String    @unique
+  stripePriceId        String
+  status               SubStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model SafetyEvent {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  type      SafetyEventType
+  trigger   String          @db.Text
+  action    String
+  createdAt DateTime        @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model DailyCostSummary {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date
+  inputTokens   BigInt   @default(0)
+  outputTokens  BigInt   @default(0)
+  totalRequests Int      @default(0)
+  costUsdMicro  BigInt   @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([date])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum SubStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  INCOMPLETE
+}
+
+enum SafetyEventType {
+  CRISIS_DETECTED
+  INAPPROPRIATE_REQUEST
+  PERSONA_BREAK_ATTEMPT
+  GEMINI_SAFETY_BLOCK
+}

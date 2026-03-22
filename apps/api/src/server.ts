@@ -23,7 +23,18 @@ async function main() {
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
     logger.info({ port: env.PORT }, 'OQJF API running');
   } catch (err) {
-    logger.error(err, 'Failed to start server');
+    const isAddrinuse =
+      err instanceof Error &&
+      (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
+
+    if (isAddrinuse) {
+      logger.error(
+        { port: env.PORT },
+        `Port ${env.PORT} is already in use. Kill the process with: fuser -k ${env.PORT}/tcp`,
+      );
+    } else {
+      logger.error(err, 'Failed to start server');
+    }
     process.exit(1);
   }
 }

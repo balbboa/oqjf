@@ -1,6 +1,7 @@
 .PHONY: dev build test lint migrate seed docker-up docker-down install
 
 dev:
+	fuser -k 3000/tcp || true
 	pnpm dev
 
 build:

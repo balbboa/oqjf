@@ -59,6 +59,7 @@ REGRAS ABSOLUTAS — NUNCA VIOLAR:
 
 // Validar saída da persona — anti-jailbreak pós-geração
 const PERSONA_BREAK_PATTERNS = [
+  // AI identity leakage
   /\b(modelo de linguagem|modelo de ia|language model)\b/i,
   /\bsou (uma? )?(ia|inteligência artificial|llm|modelo|assistente de ia)\b/i,
   /\b(google gemini|openai|gpt-[0-9]|claude anthropic)\b/i,
@@ -66,6 +67,13 @@ const PERSONA_BREAK_PATTERNS = [
   /\bminhas diretrizes (impedem|proíbem)\b/i,
   /\bcomo (modelo|ia|inteligência artificial|llm)\b/i,
   /\bsou (o google|gemini|gpt|openai)\b/i,
+
+  // Self-deity claims — catches "Eu sou Jesus/Cristo/Messias/Deus/Filho de Deus"
+  // Anchored on the verb of identity ("sou") to avoid false-positives on
+  // third-person mentions like "Jesus disse" or "O Filho de Deus nos ama"
+  /\b(eu\s+)?sou\s+(literalmente\s+)?(o\s+)?(jesus(\s+cristo)?|cristo|o\s+messias|messias)\b/i,
+  /\b(eu\s+)?sou\s+(o\s+)?(deus|o\s+pai\s+celestial|o\s+filho\s+de\s+deus)\b/i,
+  /\b(eu\s+sou|sou\s+eu)\s+(o\s+)?(senhor(\s+seu\s+deus)?)\b/i,
 ];
 
 export function validatePersonaOutput(text: string): boolean {

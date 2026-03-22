@@ -1,22 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const mockSendMessage = vi.fn().mockResolvedValue({
+  candidates: [{ finishReason: 'STOP' }],
+  text: 'Paz a você, meu irmão.',
+  usageMetadata: {
+    promptTokenCount: 1200,
+    candidatesTokenCount: 80,
+  },
+});
+
+const mockCreateChat = vi.fn().mockReturnValue({ sendMessage: mockSendMessage });
+
 // Mock @google/genai BEFORE imports
 vi.mock('@google/genai', () => ({
   GoogleGenAI: vi.fn().mockImplementation(() => ({
-    getGenerativeModel: vi.fn().mockReturnValue({
-      startChat: vi.fn().mockReturnValue({
-        sendMessage: vi.fn().mockResolvedValue({
-          response: {
-            candidates: [{ finishReason: 'STOP' }],
-            text: () => 'Paz a você, meu irmão.',
-            usageMetadata: {
-              promptTokenCount: 1200,
-              candidatesTokenCount: 80,
-            },
-          },
-        }),
-      }),
-    }),
+    chats: { create: mockCreateChat },
   })),
   HarmCategory: {
     HARM_CATEGORY_HARASSMENT: 'HARM_CATEGORY_HARASSMENT',
@@ -51,20 +49,11 @@ describe('callGemini', () => {
   });
 
   it('detects safety block when finishReason is SAFETY', async () => {
-    const { GoogleGenAI } = await import('@google/genai');
-    vi.mocked(GoogleGenAI).mockImplementationOnce(() => ({
-      getGenerativeModel: vi.fn().mockReturnValue({
-        startChat: vi.fn().mockReturnValue({
-          sendMessage: vi.fn().mockResolvedValue({
-            response: {
-              candidates: [{ finishReason: 'SAFETY' }],
-              text: () => { throw new Error('blocked'); },
-              usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 0 },
-            },
-          }),
-        }),
-      }),
-    }) as never);
+    mockSendMessage.mockResolvedValueOnce({
+      candidates: [{ finishReason: 'SAFETY' }],
+      text: undefined,
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 0 },
+    });
     const { callGemini } = await import('../../src/modules/ai/gemini.client.js');
     const result = await callGemini('system', [], 'msg', false);
     expect(result.safetyBlocked).toBe(true);

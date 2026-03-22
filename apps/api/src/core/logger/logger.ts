@@ -1,11 +1,14 @@
 import pino from 'pino';
 import { env } from '../config/env.js';
 
-export const logger = pino({
+const pinoOptions: pino.LoggerOptions = {
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production'
-    ? { target: 'pino-pretty', options: { colorize: true } }
-    : undefined,
   // NUNCA logar conteúdo de mensagens (LGPD)
   redact: ['message.content', 'userMessage', '*.content'],
-});
+};
+
+if (env.NODE_ENV !== 'production') {
+  pinoOptions.transport = { target: 'pino-pretty', options: { colorize: true } };
+}
+
+export const logger = pino(pinoOptions);

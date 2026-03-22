@@ -4,7 +4,7 @@ import { env } from '../../core/config/env.js';
 import { sendText } from '../whatsapp/sender.service.js';
 import { logger } from '../../core/logger/logger.js';
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' });
+const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-02-24.acacia' });
 
 export async function createCheckoutSession(userId: string): Promise<string> {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });

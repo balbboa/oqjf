@@ -15,12 +15,12 @@ export async function upsertUser(params: {
   return prisma.user.upsert({
     where: { whatsappId: params.whatsappId },
     update: {
-      whatsappName: params.whatsappName,
+      whatsappName: params.whatsappName ?? null,
       lastMessageAt: new Date(),
     },
     create: {
       whatsappId: params.whatsappId,
-      whatsappName: params.whatsappName,
+      whatsappName: params.whatsappName ?? null,
       freeMessagesLimit: env.FREE_MESSAGES_LIMIT,
     },
   });

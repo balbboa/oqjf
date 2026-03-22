@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "paths": {
       "persona": ["../../packages/persona/src"],
       "persona/*": ["../../packages/persona/src/*"],

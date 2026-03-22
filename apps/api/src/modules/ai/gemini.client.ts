@@ -1,15 +1,37 @@
-import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import { env } from '../../core/config/env.js';
 
-// Singleton — instanciar UMA VEZ
-const genai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+// @google/genai is ESM-only; use dynamic import to avoid CJS interop errors.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _genaiModule: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getModule(): Promise<any> {
+  if (!_genaiModule) {
+    _genaiModule = await import('@google/genai');
+  }
+  return _genaiModule;
+}
 
-const SAFETY_SETTINGS = [
-  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE    },
-  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _genai: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getGenAI(): Promise<any> {
+  if (!_genai) {
+    const mod = await getModule();
+    _genai = new mod.GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  }
+  return _genai;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getSafetySettings(): Promise<any[]> {
+  const { HarmCategory, HarmBlockThreshold } = await getModule();
+  return [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE    },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  ];
+}
 
 export interface GeminiMessage {
   role: 'user' | 'model';
@@ -33,30 +55,33 @@ export async function callGemini(
 ): Promise<GeminiResponse> {
   const modelName = useFallback ? env.GEMINI_FALLBACK_MODEL : env.GEMINI_PRIMARY_MODEL;
 
-  const model = genai.getGenerativeModel({
+  const genai = await getGenAI();
+  const safetySettings = await getSafetySettings();
+
+  const chat = genai.chats.create({
     model: modelName,
-    systemInstruction: systemPrompt, // SEMPRE via systemInstruction — nunca no histórico
-    safetySettings: SAFETY_SETTINGS,
-    generationConfig: {
+    config: {
+      systemInstruction: systemPrompt, // SEMPRE via systemInstruction — nunca no histórico
+      safetySettings,
       maxOutputTokens: env.GEMINI_MAX_OUTPUT_TOKENS,
       temperature: env.GEMINI_TEMPERATURE,
       topP: 0.95,
       topK: 40,
     },
+    history,
   });
 
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessage(userMessage);
-  const response = result.response;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response: any = await chat.sendMessage({ message: userMessage });
 
-  const finishReason = response.candidates?.[0]?.finishReason ?? 'UNKNOWN';
+  const finishReason: string = response.candidates?.[0]?.finishReason ?? 'UNKNOWN';
   const safetyBlocked = finishReason === 'SAFETY';
 
-  const inputTokens  = response.usageMetadata?.promptTokenCount    ?? 0;
-  const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+  const inputTokens: number  = response.usageMetadata?.promptTokenCount    ?? 0;
+  const outputTokens: number = response.usageMetadata?.candidatesTokenCount ?? 0;
 
   return {
-    text: safetyBlocked ? '' : response.text(),
+    text: safetyBlocked ? '' : (response.text ?? ''),
     inputTokens,
     outputTokens,
     modelUsed: modelName,

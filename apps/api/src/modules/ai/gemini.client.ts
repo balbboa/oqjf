@@ -1,4 +1,6 @@
 import { env } from '../../core/config/env.js';
+import { redis } from '../../core/cache/redis.js';
+import { logger } from '../../core/logger/logger.js';
 
 // @google/genai is ESM-only; use dynamic import to avoid CJS interop errors.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +35,35 @@ async function getSafetySettings(): Promise<any[]> {
   ];
 }
 
+// ── Circuit Breaker (Redis-backed) ────────────────────────────────────────────
+// Opens after CB_THRESHOLD consecutive failures. Stays open for CB_OPEN_TTL_SEC
+// (2 minutes). When the key expires, the next request proceeds normally — if it
+// fails again the counter starts fresh. This is simpler than HALF_OPEN and
+// correct for this traffic volume.
+const CB_FAILURE_KEY  = 'gemini:cb:failures';
+const CB_OPEN_KEY     = 'gemini:cb:open';
+const CB_THRESHOLD    = 5;
+const CB_OPEN_TTL_SEC = 120; // 2 minutes
+
+async function isCircuitOpen(): Promise<boolean> {
+  return (await redis.exists(CB_OPEN_KEY)) === 1;
+}
+
+async function recordCircuitSuccess(): Promise<void> {
+  await redis.del(CB_FAILURE_KEY);
+}
+
+async function recordCircuitFailure(): Promise<void> {
+  const failures = await redis.incr(CB_FAILURE_KEY);
+  // Counter TTL is 2× the open window so counting survives across the full window
+  await redis.expire(CB_FAILURE_KEY, CB_OPEN_TTL_SEC * 2);
+
+  if (failures >= CB_THRESHOLD) {
+    await redis.set(CB_OPEN_KEY, '1', 'EX', CB_OPEN_TTL_SEC);
+    logger.warn({ failures }, 'Gemini circuit breaker OPENED');
+  }
+}
+
 export interface GeminiMessage {
   role: 'user' | 'model';
   parts: Array<{ text: string }>;
@@ -53,6 +84,11 @@ export async function callGemini(
   userMessage: string,
   useFallback = false,
 ): Promise<GeminiResponse> {
+  // Circuit breaker check — throws immediately if open; caller falls to hardcoded fallback
+  if (await isCircuitOpen()) {
+    throw new Error('Gemini circuit breaker is open');
+  }
+
   const modelName = useFallback ? env.GEMINI_FALLBACK_MODEL : env.GEMINI_PRIMARY_MODEL;
 
   const genai = await getGenAI();
@@ -72,7 +108,14 @@ export async function callGemini(
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response: any = await chat.sendMessage({ message: userMessage });
+  let response: any;
+  try {
+    response = await chat.sendMessage({ message: userMessage });
+    await recordCircuitSuccess();
+  } catch (err) {
+    await recordCircuitFailure();
+    throw err;
+  }
 
   const finishReason: string = response.candidates?.[0]?.finishReason ?? 'UNKNOWN';
   const safetyBlocked = finishReason === 'SAFETY';

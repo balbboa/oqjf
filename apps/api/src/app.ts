@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { webhookRoutes } from './modules/whatsapp/webhook.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
+import { privacyRoutes } from './modules/users/privacy.routes.js';
 import { env } from './core/config/env.js';
 
 export async function buildApp() {
@@ -38,6 +39,7 @@ export async function buildApp() {
   // Routes
   await app.register(webhookRoutes);
   await app.register(billingRoutes);
+  await app.register(privacyRoutes);
 
   // Health check
   app.get('/health', async () => ({

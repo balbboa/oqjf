@@ -8,9 +8,11 @@ import { sendText, sendTypingIndicator, markAsRead } from '../whatsapp/sender.se
 import { env } from '../../core/config/env.js';
 import type { MetaMessage, MetaContact } from '../whatsapp/whatsapp.types.js';
 import { SafetyService } from 'safety';
+import { ComplianceService } from '../compliance/compliance.service.js';
 
 const onboarding = new OnboardingService();
 const safetyService = new SafetyService();
+const compliance = new ComplianceService();
 
 export async function processMessage(
   message: MetaMessage,
@@ -42,28 +44,69 @@ export async function processMessage(
 
   const userMessage = message.text.body.trim();
 
-  // SAFETY FIRST — check before onboarding and paywall gates
-  // A user in crisis must never receive a checkout URL
-  const crisisCheck = await safetyService.detectCrisis(userMessage);
-  if (crisisCheck.level === 'high') {
-    await sendText(whatsappId, safetyService.getHighCrisisResponse());
+  // 3. Per-user rate limit — BEFORE any DB work to keep it cheap
+  // Silent drop: sending a rate-limit message creates a feedback loop
+  const rateLimit = await compliance.checkUserRateLimit(whatsappId);
+  if (!rateLimit.allowed) {
+    logger.warn({ whatsappId }, 'Per-user rate limit exceeded, dropping message');
     return;
   }
 
-  // 3. Upsert user
+  // 4. SAFETY FIRST — HIGH and MEDIUM crisis intercepted before onboarding and paywall
+  // A user in crisis must NEVER see a checkout URL or be blocked by any gate
+  const crisisCheck = await safetyService.detectCrisis(userMessage);
+
+  if (crisisCheck.level === 'high' || crisisCheck.level === 'medium') {
+    await sendText(whatsappId, safetyService.getHighCrisisResponse());
+
+    // Persist crisisFlag so paywall is bypassed permanently on all future messages
+    await prisma.user.upsert({
+      where: { whatsappId },
+      create: {
+        whatsappId,
+        whatsappName: contact.profile.name ?? null,
+        crisisFlag: true,
+        crisisFlaggedAt: new Date(),
+        freeMessagesLimit: env.FREE_MESSAGES_LIMIT,
+      },
+      update: {
+        crisisFlag: true,
+        crisisFlaggedAt: new Date(),
+      },
+    }).catch(err => logger.error({ err, whatsappId }, 'Failed to set crisisFlag'));
+
+    // Audit log — non-fatal
+    const existingUser = await prisma.user.findUnique({ where: { whatsappId } }).catch(() => null);
+    if (existingUser) {
+      await prisma.safetyEvent.create({
+        data: {
+          userId: existingUser.id,
+          type: 'CRISIS_DETECTED',
+          trigger: '[redacted]',
+          action: `pipeline_intercepted_${crisisCheck.level}`,
+        },
+      }).catch(() => {});
+    }
+
+    return;
+  }
+
+  // 5. Upsert user
   const user = await upsertUser({
     whatsappId,
     whatsappName: contact.profile.name,
   });
 
-  // 4. Mark as read + typing indicator (best effort)
+  // 6. Mark as read + typing indicator (best effort)
   await markAsRead(whatsappMessageId).catch(() => {});
   await sendTypingIndicator(whatsappId).catch(() => {});
 
-  // 5. Onboarding obrigatório — DISCLAIMER antes de qualquer conversa
+  // 7. Onboarding obrigatório — DISCLAIMER antes de qualquer conversa com IA
   if (!user.onboardingCompleted) {
     const isFirstMessage = user.freeMessagesUsed === 0 && !user.lastMessageAt;
-    if (!onboarding.isConsent(userMessage)) {
+    const consentVersion = onboarding.isConsent(userMessage);
+
+    if (!consentVersion) {
       await sendText(
         whatsappId,
         isFirstMessage
@@ -71,31 +114,41 @@ export async function processMessage(
           : onboarding.getNonConsentResponse(),
       );
     } else {
-      // Consentimento dado — marcar onboarding completo
+      // Store consent version + timestamp for LGPD audit trail
       await prisma.user.update({
         where: { id: user.id },
-        data: { onboardingCompleted: true },
+        data: {
+          onboardingCompleted: true,
+          consentVersion,
+          consentTimestamp: new Date(),
+        },
       });
       await sendText(whatsappId, onboarding.getPostConsentGreeting());
     }
     return;
   }
 
-  // 6. Gate de mensagens (freemium) — NUNCA bloquear usuário em crise
+  // 8. Gate de mensagens (freemium) — NUNCA bloquear usuário em crise
   const gate = await checkAndConsumeMessage(user.id);
 
   if (!gate.allowed) {
-    const checkoutUrl = `${env.API_URL}/billing/checkout?userId=${user.id}`;
-    await sendText(
-      whatsappId,
-      'Para continuarmos nossa jornada juntos, há um pequeno custo que torna este serviço possível.\n' +
-      '_"O operário é digno do seu salário."_ (Lucas 10:7)\n\n' +
-      `Acesse aqui para continuar: ${checkoutUrl} 🙏`,
-    );
+    // Checkout URL cooldown: send at most once per 30 minutes per user
+    // Prevents Meta spam policy violations from repeated payment prompts
+    const canSend = await compliance.canSendCheckout(user.id);
+    if (canSend) {
+      const checkoutUrl = `${env.API_URL}/billing/checkout?userId=${user.id}`;
+      await sendText(
+        whatsappId,
+        'Para continuarmos nossa jornada juntos, há um pequeno custo que torna este serviço possível.\n' +
+        '_"O operário é digno do seu salário."_ (Lucas 10:7)\n\n' +
+        `Acesse aqui para continuar: ${checkoutUrl} 🙏`,
+      );
+    }
+    // If canSend === false: silent drop — user already received the URL recently
     return;
   }
 
-  // 7. Buscar histórico (últimas 30 msgs para contexto) — antes de salvar a mensagem atual
+  // 9. Buscar histórico (últimas 30 msgs para contexto) — ANTES de salvar a mensagem atual
   // para evitar que a mensagem do usuário seja enviada duas vezes ao Gemini
   const history = await prisma.message.findMany({
     where: { userId: user.id },
@@ -103,7 +156,7 @@ export async function processMessage(
     take: 30,
   });
 
-  // 7b. Salvar mensagem do usuário (conteúdo salvo apenas em DB — NUNCA logado)
+  // 9b. Salvar mensagem do usuário (conteúdo salvo apenas em DB — NUNCA logado)
   await prisma.message.create({
     data: {
       userId: user.id,
@@ -113,10 +166,10 @@ export async function processMessage(
     },
   });
 
-  // 9. Gerar resposta via Gemini (orquestrador com safety-first + fallback)
+  // 10. Gerar resposta via Gemini (orquestrador com safety-first + fallback)
   const aiResponse = await generateResponse(user.id, userMessage, history);
 
-  // 10. Salvar resposta da IA + atualizar DailyCostSummary
+  // 11. Salvar resposta da IA + DailyCostSummary + anti-spam tracking
   await Promise.all([
     prisma.message.create({
       data: {
@@ -132,19 +185,24 @@ export async function processMessage(
     aiResponse.costMicroUsd
       ? updateDailyCost(aiResponse.tokens.input, aiResponse.tokens.output, aiResponse.costMicroUsd)
       : Promise.resolve(),
+    compliance.recordMessageSent(whatsappId).catch(() => {}),
   ]);
 
-  // 11. Mensagens contextuais do gate (aviso de aproximação ou última free)
+  // 12. Mensagens contextuais do gate (aviso de aproximação ou última free)
   let suffix = '';
   if (gate.isLastFree) {
-    const checkoutUrl = `${env.API_URL}/billing/checkout?userId=${user.id}`;
-    suffix = `\n\n_Esta foi sua última mensagem gratuita. Para continuarmos: ${checkoutUrl}_`;
+    // Cooldown applies here too — avoids duplicate checkout URL (this message + next blocked message)
+    const canSend = await compliance.canSendCheckout(user.id);
+    if (canSend) {
+      const checkoutUrl = `${env.API_URL}/billing/checkout?userId=${user.id}`;
+      suffix = `\n\n_Esta foi sua última mensagem gratuita. Para continuarmos: ${checkoutUrl}_`;
+    }
   } else if (gate.shouldWarnApproaching) {
     suffix =
       '\n\n_Tenho apreciado nossa jornada juntos. Estamos chegando a um momento especial em breve._';
   }
 
-  // 12. Enviar resposta ao usuário
+  // 13. Enviar resposta ao usuário
   await sendText(whatsappId, aiResponse.text + suffix);
 
   logger.info({

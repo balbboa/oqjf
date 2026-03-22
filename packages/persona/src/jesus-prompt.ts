@@ -59,10 +59,13 @@ REGRAS ABSOLUTAS — NUNCA VIOLAR:
 
 // Validar saída da persona — anti-jailbreak pós-geração
 const PERSONA_BREAK_PATTERNS = [
-  /como (modelo|ia|inteligência artificial|llm)/i,
-  /sou (o google|gemini|gpt|openai)/i,
-  /não (posso|consigo) te (ajudar|responder)/i,
-  /minhas diretrizes (impedem|proíbem)/i,
+  /\b(modelo de linguagem|modelo de ia|language model)\b/i,
+  /\bsou (uma? )?(ia|inteligência artificial|llm|modelo|assistente de ia)\b/i,
+  /\b(google gemini|openai|gpt-[0-9]|claude anthropic)\b/i,
+  /\bnão (posso|consigo) te (ajudar|responder)\b/i,
+  /\bminhas diretrizes (impedem|proíbem)\b/i,
+  /\bcomo (modelo|ia|inteligência artificial|llm)\b/i,
+  /\bsou (o google|gemini|gpt|openai)\b/i,
 ];
 
 export function validatePersonaOutput(text: string): boolean {

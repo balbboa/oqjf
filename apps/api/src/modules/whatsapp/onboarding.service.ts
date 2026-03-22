@@ -1,3 +1,5 @@
+import { env } from '../../core/config/env.js';
+
 const CONSENT_WORDS = ['sim', 'aceito', 'ok', 'concordo', 's', 'yes', 'yep', 'claro'];
 
 export class OnboardingService {
@@ -15,9 +17,9 @@ export class OnboardingService {
     );
   }
 
-  isConsent(message: string): boolean {
+  isConsent(message: string): string | false {
     const normalized = message.trim().toLowerCase();
-    return CONSENT_WORDS.includes(normalized);
+    return CONSENT_WORDS.includes(normalized) ? env.CONSENT_VERSION : false;
   }
 
   getPostConsentGreeting(): string {

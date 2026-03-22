@@ -25,6 +25,7 @@ export default defineConfig({
       CHECKOUT_SUCCESS_URL: 'http://localhost/success',
       CHECKOUT_CANCEL_URL: 'http://localhost/cancel',
       FREE_MESSAGES_LIMIT: '30',
+      CONSENT_VERSION: '1.0',
       SAFETY_MODULE_ENABLED: 'true',
       CVV_NUMBER: '188',
       API_URL: 'http://localhost:3000',

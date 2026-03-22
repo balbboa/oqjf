@@ -1,4 +1,10 @@
+import { config } from 'dotenv';
+import { resolve } from 'path';
 import { z } from 'zod';
+
+// Load .env relative to the package root (apps/api/).
+// Works in both CJS (tsx) and native ESM contexts.
+config({ path: resolve(process.cwd(), '.env') });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -27,11 +33,12 @@ const envSchema = z.object({
   CHECKOUT_CANCEL_URL: z.string().min(1),
 
   FREE_MESSAGES_LIMIT: z.coerce.number().default(30),
+  CONSENT_VERSION: z.string().default('1.0'),
 
   SAFETY_MODULE_ENABLED: z.enum(['true', 'false']).default('true').transform(v => v === 'true'),
   CVV_NUMBER: z.string().default('188'),
 
-  DISCORD_WEBHOOK_URL: z.string().url().optional(),
+  DISCORD_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
 });
 
 export type Env = z.infer<typeof envSchema>;

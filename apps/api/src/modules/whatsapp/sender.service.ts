@@ -16,6 +16,17 @@ async function metaPost(endpoint: string, body: unknown, attempt = 1): Promise<v
 
   if (!res.ok) {
     const error = await res.text();
+
+    // 401 = token expired or revoked — retrying won't fix it, fail fast
+    if (res.status === 401) {
+      logger.error(
+        { status: 401 },
+        'Meta API authentication failed — META_ACCESS_TOKEN is expired or invalid. ' +
+        'Generate a new token at Meta Developer Console → WhatsApp → API Setup.',
+      );
+      throw new Error('Meta API 401: token expired or invalid');
+    }
+
     if (attempt < 3) {
       await new Promise(r => setTimeout(r, attempt * 1000));
       return metaPost(endpoint, body, attempt + 1);

@@ -1,0 +1,17 @@
+{
+  "name": "oqjf",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "pnpm --filter api dev",
+    "build": "pnpm --filter api build",
+    "test": "pnpm --filter api test",
+    "test:unit": "pnpm --filter api test:unit",
+    "test:integration": "pnpm --filter api test:integration",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "db:seed": "pnpm --filter api db:seed"
+  }
+}

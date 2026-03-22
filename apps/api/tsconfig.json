@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "persona": ["../../packages/persona/src"],
+      "safety": ["../../packages/safety/src"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*", "prisma/**/*"]
+}

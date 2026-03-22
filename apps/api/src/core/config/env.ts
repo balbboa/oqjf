@@ -28,7 +28,7 @@ const envSchema = z.object({
 
   FREE_MESSAGES_LIMIT: z.coerce.number().default(30),
 
-  SAFETY_MODULE_ENABLED: z.enum(['true', 'false']).transform(v => v === 'true'),
+  SAFETY_MODULE_ENABLED: z.enum(['true', 'false']).default('true').transform(v => v === 'true'),
   CVV_NUMBER: z.string().default('188'),
 
   DISCORD_WEBHOOK_URL: z.string().url().optional(),

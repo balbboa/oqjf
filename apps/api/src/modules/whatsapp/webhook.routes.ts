@@ -32,6 +32,8 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Process asynchronously (webhook already replied 200)
-    await handleWebhookPayload(req.body);
+    await handleWebhookPayload(req.body).catch(err => {
+      app.log.error(err, 'Unhandled error in webhook payload processing');
+    });
   });
 }

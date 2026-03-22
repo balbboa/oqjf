@@ -7,8 +7,10 @@ import { generateResponse } from '../ai/orchestrator.js';
 import { sendText, sendTypingIndicator, markAsRead } from '../whatsapp/sender.service.js';
 import { env } from '../../core/config/env.js';
 import type { MetaMessage, MetaContact } from '../whatsapp/whatsapp.types.js';
+import { SafetyService } from 'safety';
 
 const onboarding = new OnboardingService();
+const safetyService = new SafetyService();
 
 export async function processMessage(
   message: MetaMessage,
@@ -39,6 +41,14 @@ export async function processMessage(
   }
 
   const userMessage = message.text.body.trim();
+
+  // SAFETY FIRST — check before onboarding and paywall gates
+  // A user in crisis must never receive a checkout URL
+  const crisisCheck = await safetyService.detectCrisis(userMessage);
+  if (crisisCheck.level === 'high') {
+    await sendText(whatsappId, safetyService.getHighCrisisResponse());
+    return;
+  }
 
   // 3. Upsert user
   const user = await upsertUser({
@@ -85,7 +95,15 @@ export async function processMessage(
     return;
   }
 
-  // 7. Salvar mensagem do usuário (conteúdo salvo apenas em DB — NUNCA logado)
+  // 7. Buscar histórico (últimas 30 msgs para contexto) — antes de salvar a mensagem atual
+  // para evitar que a mensagem do usuário seja enviada duas vezes ao Gemini
+  const history = await prisma.message.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'asc' },
+    take: 30,
+  });
+
+  // 7b. Salvar mensagem do usuário (conteúdo salvo apenas em DB — NUNCA logado)
   await prisma.message.create({
     data: {
       userId: user.id,
@@ -93,13 +111,6 @@ export async function processMessage(
       content: userMessage,
       whatsappId: whatsappMessageId,
     },
-  });
-
-  // 8. Buscar histórico (últimas 30 msgs para contexto)
-  const history = await prisma.message.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'asc' },
-    take: 30,
   });
 
   // 9. Gerar resposta via Gemini (orquestrador com safety-first + fallback)

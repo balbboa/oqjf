@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { env } from '../../core/config/env.js';
 import { logger } from '../../core/logger/logger.js';
 import { processMessage } from '../pipeline/message.pipeline.js';
@@ -8,7 +8,9 @@ export function verifyMetaSignature(body: string, signature: string): boolean {
   const expected = createHmac('sha256', env.META_APP_SECRET)
     .update(body)
     .digest('hex');
-  return `sha256=${expected}` === signature;
+  const a = Buffer.from(`sha256=${expected}`);
+  const b = Buffer.from(signature);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function handleWebhookPayload(payload: MetaWebhookPayload): Promise<void> {

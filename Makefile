@@ -29,8 +29,12 @@ install:
 	pnpm install
 
 tunnel:
-	ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-	    -R 80:localhost:3000 serveo.net
+	@while true; do \
+	  ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+	      -R 80:localhost:3000 serveo.net; \
+	  echo "Tunnel disconnected, reconnecting in 3s..."; \
+	  sleep 3; \
+	done
 
 tunnel-alt:
 	ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 localhost.run

@@ -34,6 +34,9 @@ async function metaPost(endpoint: string, body: unknown, attempt = 1): Promise<v
     logger.error({ status: res.status, error }, 'Meta API error after retries');
     throw new Error(`Meta API error ${res.status}: ${error}`);
   }
+
+  const responseText = await res.text();
+  logger.info({ status: res.status, response: responseText }, 'Meta API success');
 }
 
 export async function markAsRead(messageId: string): Promise<void> {
@@ -44,22 +47,28 @@ export async function markAsRead(messageId: string): Promise<void> {
   });
 }
 
-export async function sendTypingIndicator(to: string): Promise<void> {
-  // WhatsApp Cloud API does not have a native typing indicator endpoint.
-  // Best effort: mark as read to show activity.
-  try {
-    await markAsRead(to);
-  } catch {
-    // Don't block main flow
+export async function sendTypingIndicator(_to: string): Promise<void> {
+  // WhatsApp Cloud API has no native typing indicator endpoint.
+  // markAsRead is already called separately with the correct message ID.
+}
+
+// Meta webhook delivers Brazilian mobile numbers in 12-digit format (55 + DDD + 8 digits).
+// The actual registered WhatsApp uses 13-digit format (55 + DDD + 9 + 8 digits).
+// Expand before sending so the reply reaches the correct number.
+function expandBrPhone(to: string): string {
+  if (/^55\d{2}9\d{7}$/.test(to)) {
+    return to.slice(0, 4) + '9' + to.slice(4);
   }
+  return to;
 }
 
 export async function sendText(to: string, text: string): Promise<void> {
+  const expandedTo = expandBrPhone(to);
   // Chunking: if text > 1000 chars, split into paragraphs with natural delay
   if (text.length <= 1000) {
     await metaPost('/messages', {
       messaging_product: 'whatsapp',
-      to,
+      to: expandedTo,
       type: 'text',
       text: { body: text },
     });
@@ -70,7 +79,7 @@ export async function sendText(to: string, text: string): Promise<void> {
   for (let i = 0; i < chunks.length; i++) {
     await metaPost('/messages', {
       messaging_product: 'whatsapp',
-      to,
+      to: expandedTo,
       type: 'text',
       text: { body: chunks[i] },
     });

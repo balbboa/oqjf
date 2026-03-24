@@ -73,7 +73,7 @@ export async function processMessage(
         crisisFlag: true,
         crisisFlaggedAt: new Date(),
       },
-    }).catch(err => logger.error({ err, whatsappId }, 'Failed to set crisisFlag'));
+    }).catch((err: unknown) => logger.error({ err, whatsappId }, 'Failed to set crisisFlag'));
 
     // Audit log — non-fatal
     const existingUser = await prisma.user.findUnique({ where: { whatsappId } }).catch(() => null);

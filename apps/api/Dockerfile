@@ -19,13 +19,10 @@ RUN pnpm --filter api build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
-RUN npm install -g pnpm
-COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
-COPY --from=build /app/apps/api/package.json ./apps/api/
-COPY --from=build /app/packages/persona/package.json ./packages/persona/
-COPY --from=build /app/packages/safety/package.json ./packages/safety/
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
-RUN pnpm install --frozen-lockfile --prod
+COPY --from=build /app/apps/api/package.json ./apps/api/
 EXPOSE 3000
 CMD ["node", "apps/api/dist/server.js"]

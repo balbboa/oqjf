@@ -1,7 +1,7 @@
 import { env } from '../../core/config/env.js';
 import { logger } from '../../core/logger/logger.js';
 
-const BASE_URL = `https://graph.facebook.com/v21.0/${env.META_PHONE_NUMBER_ID}`;
+const BASE_URL = `https://graph.facebook.com/v22.0/${env.META_PHONE_NUMBER_ID}`;
 const HEADERS = {
   'Authorization': `Bearer ${env.META_ACCESS_TOKEN}`,
   'Content-Type': 'application/json',

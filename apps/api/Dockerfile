@@ -24,5 +24,7 @@ COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/
+RUN ln -s /app/apps/api/dist/packages/safety/src /app/node_modules/safety
+RUN ln -s /app/apps/api/dist/packages/persona/src /app/node_modules/persona
 EXPOSE 3000
 CMD ["node", "apps/api/dist/apps/api/src/server.js"]

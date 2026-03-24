@@ -16,7 +16,6 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY . .
 RUN pnpm --filter api exec prisma generate
 RUN pnpm --filter api build
-RUN find /app/apps/api/dist -name "server.js" | head -5
 
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -26,4 +25,4 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/
 EXPOSE 3000
-CMD ["node", "apps/api/dist/src/server.js"]
+CMD ["node", "apps/api/dist/apps/api/src/server.js"]

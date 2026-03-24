@@ -18,6 +18,7 @@ RUN pnpm --filter api exec prisma generate
 RUN pnpm --filter api build
 
 FROM node:20-slim AS runner
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
